@@ -18,7 +18,7 @@ int            hb_nvenc_h265_available();
 int            hb_nvenc_av1_available();
 int            hb_check_nvenc_available();
 int            hb_check_nvdec_available();
-int            hb_nvenc_default_device_index(void);
+int            hb_nvenc_av1_device_index(void);
 
 const char * hb_map_nvenc_preset_name (const char *preset);
 

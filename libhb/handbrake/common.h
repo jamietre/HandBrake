@@ -560,6 +560,7 @@ const char* const* hb_video_encoder_get_profiles(int encoder);
 const char* const* hb_video_encoder_get_levels  (int encoder);
 const int*         hb_video_encoder_get_pix_fmts(int encoder, const char *profile);
 int                hb_video_encoder_is_vaapi(int encoder);
+int                hb_video_encoder_is_nvenc(int encoder);
 
 
 void  hb_audio_quality_get_limits(uint32_t codec, float *low, float *high, float *granularity, int *direction);
