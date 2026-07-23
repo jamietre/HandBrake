@@ -15,6 +15,7 @@
 #include "handbrake/dovi_common.h"
 #include "handbrake/rpu.h"
 #include "handbrake/hwaccel.h"
+#include "handbrake/nvenc_common.h"
 
 #if HB_PROJECT_FEATURE_QSV
 #include "handbrake/qsv_common.h"
@@ -1771,6 +1772,21 @@ static void do_job(hb_job_t *job)
     {
         #if HB_PROJECT_FEATURE_QSV
         hb_qsv_setup_job(job);
+        #endif
+    }
+    if (job->hw_decode & HB_DECODE_NVDEC)
+    {
+        #if HB_PROJECT_FEATURE_NVENC
+        // Mirrors hb_qsv_setup_job(): a hw_device_index of -1 means the
+        // user didn't force an adapter, so pick the first AV1-capable GPU
+        // ourselves. Otherwise, once hardware decode binds a context, the
+        // NVENC encoder below reuses it as-is (encavcodec.c) rather than
+        // running ffmpeg's own capable-device fallback loop, so an
+        // unset/default context can land on a GPU that can't do AV1.
+        if (job->hw_device_index == -1)
+        {
+            job->hw_device_index = hb_nvenc_default_device_index();
+        }
         #endif
     }
 

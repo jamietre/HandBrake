@@ -233,12 +233,24 @@ int hb_hwaccel_hw_device_ctx_init(enum AVHWDeviceType device_type, int device_in
 
     AVBufferRef *ctx;
     AVDictionary *dict = NULL;
+    char device[32];
+    const char *device_arg = NULL;
 
     if (device_index > -1)
     {
-        char device[32];
-        snprintf(device, 32, "%u", device_index);
-        av_dict_set(&dict, "child_device", device, 0);
+        snprintf(device, sizeof(device), "%u", device_index);
+
+        // "child_device" only has meaning for QSV's D3D11VA child-device
+        // wiring. CUDA takes its device selector as the device string
+        // itself (the 3rd positional arg below), not via the dict.
+        if (device_type == AV_HWDEVICE_TYPE_CUDA)
+        {
+            device_arg = device;
+        }
+        else
+        {
+            av_dict_set(&dict, "child_device", device, 0);
+        }
     }
 
 #if defined(_WIN32) || defined(__MINGW32__)
@@ -248,7 +260,7 @@ int hb_hwaccel_hw_device_ctx_init(enum AVHWDeviceType device_type, int device_in
     }
 #endif
 
-    if ((err = av_hwdevice_ctx_create(&ctx, device_type, NULL, dict, 0)) < 0)
+    if ((err = av_hwdevice_ctx_create(&ctx, device_type, device_arg, dict, 0)) < 0)
     {
         hb_error("hwaccel: failed to create hwdevice");
     }

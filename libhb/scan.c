@@ -10,6 +10,7 @@
 #include "handbrake/handbrake.h"
 #include "handbrake/hbffmpeg.h"
 #include "handbrake/hwaccel.h"
+#include "handbrake/nvenc_common.h"
 
 typedef struct
 {
@@ -720,7 +721,18 @@ static int DecodePreviews( hb_scan_t * data, hb_title_t * title, int flush )
         hwaccel->caps & HB_HWACCEL_CAP_SCAN &&
         hb_hwaccel_is_available(hwaccel, title->video_codec_param))
     {
-        hb_hwaccel_hw_device_ctx_init(hwaccel->type, -1, &hw_device_ctx);
+        // No job exists yet at scan time to carry an explicit adapter
+        // choice (unlike the QSV path via job->hw_device_index), so for
+        // CUDA we pick the first AV1-capable device up front. Otherwise a
+        // later AV1 NVENC encode would inherit this decode context and be
+        // bound to whatever device CUDA treats as default, which may not
+        // support AV1 (e.g. an older GPU alongside a newer one).
+        int device_index = -1;
+        if (hwaccel->type == AV_HWDEVICE_TYPE_CUDA)
+        {
+            device_index = hb_nvenc_default_device_index();
+        }
+        hb_hwaccel_hw_device_ctx_init(hwaccel->type, device_index, &hw_device_ctx);
     }
 
     hb_work_object_t *vid_decoder = hb_get_work(data->h, title->video_codec);
