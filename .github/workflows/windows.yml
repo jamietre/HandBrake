@@ -316,4 +316,13 @@ jobs:
         files: artifacts/**/*
         fail_on_unmatched_files: false
         generate_release_notes: true
+        body: |
+          Multi-GPU NVENC AV1 fix: correctly detects and routes AV1 (NVEnc) encoding
+          when multiple NVIDIA GPUs are installed and only one supports AV1 encode
+          (e.g. an older Ampere card alongside a newer Blackwell card). Previously
+          the encoder dropdown never showed AV1 (NVEnc) at all in this situation,
+          and even when forced, encodes would fail by routing to the wrong GPU.
+
+          See [README-fork.md](https://github.com/jamietre/HandBrake/blob/nvenc-multi-gpu-av1/README-fork.md)
+          for the full root-cause writeup and validation notes.
 
