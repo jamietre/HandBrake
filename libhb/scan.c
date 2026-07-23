@@ -730,7 +730,7 @@ static int DecodePreviews( hb_scan_t * data, hb_title_t * title, int flush )
         int device_index = -1;
         if (hwaccel->type == AV_HWDEVICE_TYPE_CUDA)
         {
-            device_index = hb_nvenc_default_device_index();
+            device_index = hb_nvenc_av1_device_index();
         }
         hb_hwaccel_hw_device_ctx_init(hwaccel->type, device_index, &hw_device_ctx);
     }

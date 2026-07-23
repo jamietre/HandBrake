@@ -1783,9 +1783,15 @@ static void do_job(hb_job_t *job)
         // NVENC encoder below reuses it as-is (encavcodec.c) rather than
         // running ffmpeg's own capable-device fallback loop, so an
         // unset/default context can land on a GPU that can't do AV1.
-        if (job->hw_device_index == -1)
+        //
+        // Only for NVENC encoders: hw_device_index is shared with other
+        // vendors' adapter selection (e.g. QSV's child_device in
+        // encavcodec.c), so a CUDA ordinal must not leak into a job that
+        // encodes elsewhere.
+        if (job->hw_device_index == -1 &&
+            hb_video_encoder_is_nvenc(job->vcodec))
         {
-            job->hw_device_index = hb_nvenc_default_device_index();
+            job->hw_device_index = hb_nvenc_av1_device_index();
         }
         #endif
     }

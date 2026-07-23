@@ -24,10 +24,14 @@ typedef struct {
     int has_h264_10bit;
     int has_hevc;
     int has_av1;
+    int av1_device_index; // -1 if has_av1 is false
 } nvenc_caps_t;
 
-static nvenc_caps_t g_nvenc_caps = { 0 };
-static int g_nvenc_default_device_index = -2; // -2 = not yet computed
+// Published via a single struct assignment (not two separate globals) so a
+// concurrent first caller can't observe .probed before av1_device_index --
+// two independent stores would have no ordering guarantee relative to each
+// other on a weaker memory model (e.g. this project's ARM64 CI builds).
+static nvenc_caps_t g_nvenc_caps = { .av1_device_index = -1 };
 
 int hb_check_nvenc_available()
 {
@@ -101,8 +105,9 @@ static int hb_nvenc_guid_eq(GUID a, GUID b)
     return memcmp(&a, &b, sizeof(GUID)) == 0;
 }
 
-// Probes a single CUDA device index and ORs its encode GUIDs into *caps.
-// A GPU that doesn't support a codec (e.g. Ampere lacking AV1) must not
+// Probes a single CUDA device and fills *caps with its encode GUIDs.
+// *caps must be a fresh per-device struct; the caller ORs results across
+// devices so that a GPU lacking a codec (e.g. Ampere without AV1) can't
 // clear flags another GPU already set.
 static void hb_nvenc_probe_device_caps(CudaFunctions *cu, NvencFunctions *nv,
                                         CUdevice dev, nvenc_caps_t *caps)
@@ -159,7 +164,7 @@ static void hb_nvenc_probe_device_caps(CudaFunctions *cu, NvencFunctions *nv,
         if (hb_nvenc_guid_eq(guids[i], NV_ENC_CODEC_H264_GUID))
         {
             caps->has_h264       = 1;
-            caps->has_h264_10bit |= hb_nvenc_probe_cap(
+            caps->has_h264_10bit = hb_nvenc_probe_cap(
                 &fl, enc, NV_ENC_CODEC_H264_GUID,
                 NV_ENC_CAPS_SUPPORT_10BIT_ENCODE) > 0;
         }
@@ -189,58 +194,74 @@ static void hb_nvenc_probe_caps(void)
     {
         return;
     }
-    g_nvenc_caps.probed = 1;
 
-    if (!hb_check_nvenc_available())
+    nvenc_caps_t caps = { .av1_device_index = -1 };
+
+    if (hb_check_nvenc_available())
     {
-        return;
-    }
-
 #if HB_PROJECT_FEATURE_NVENC
-    CudaFunctions  *cu = NULL;
-    NvencFunctions *nv = NULL;
+        CudaFunctions  *cu = NULL;
+        NvencFunctions *nv = NULL;
 
-    if (cuda_load_functions(&cu, NULL) < 0)
-    {
-        goto done;
-    }
-    if (cu->cuInit(0) != CUDA_SUCCESS)
-    {
-        goto done;
-    }
-    if (nvenc_load_functions(&nv, NULL) < 0)
-    {
-        goto done;
-    }
-
-    int dev_count = 0;
-    cu->cuDeviceGetCount(&dev_count);
-    if (dev_count <= 0)
-    {
-        goto done;
-    }
-
-    // Every installed GPU can support a different codec set (e.g. an
-    // Ampere card with no AV1 encode alongside a Blackwell card that has
-    // it), so every device must be probed and the results OR'd together.
-    for (int i = 0; i < dev_count; i++)
-    {
-        CUdevice dev;
-        if (cu->cuDeviceGet(&dev, i) != CUDA_SUCCESS)
+        if (cuda_load_functions(&cu, NULL) < 0)
         {
-            continue;
+            goto done;
         }
-        hb_nvenc_probe_device_caps(cu, nv, dev, &g_nvenc_caps);
-    }
+        if (cu->cuInit(0) != CUDA_SUCCESS)
+        {
+            goto done;
+        }
+        if (nvenc_load_functions(&nv, NULL) < 0)
+        {
+            goto done;
+        }
 
-    hb_log("nvenc: caps probe -> h264=%d h264_10bit=%d hevc=%d av1=%d",
-           g_nvenc_caps.has_h264, g_nvenc_caps.has_h264_10bit,
-           g_nvenc_caps.has_hevc, g_nvenc_caps.has_av1);
+        int dev_count = 0;
+        cu->cuDeviceGetCount(&dev_count);
+
+        // Every installed GPU can support a different codec set (e.g. an
+        // Ampere card with no AV1 encode alongside a Blackwell card that
+        // has it), so every device must be probed and the results OR'd
+        // together. The first AV1-capable device is recorded in the same
+        // pass so device selection doesn't need a second round of probing.
+        for (int i = 0; i < dev_count; i++)
+        {
+            CUdevice dev;
+            if (cu->cuDeviceGet(&dev, i) != CUDA_SUCCESS)
+            {
+                continue;
+            }
+
+            nvenc_caps_t dev_caps = { 0 };
+            hb_nvenc_probe_device_caps(cu, nv, dev, &dev_caps);
+
+            caps.has_h264       |= dev_caps.has_h264;
+            caps.has_h264_10bit |= dev_caps.has_h264_10bit;
+            caps.has_hevc       |= dev_caps.has_hevc;
+            caps.has_av1        |= dev_caps.has_av1;
+
+            if (caps.av1_device_index == -1 && dev_caps.has_av1)
+            {
+                caps.av1_device_index = i;
+            }
+        }
+
+        hb_log("nvenc: caps probe -> h264=%d h264_10bit=%d hevc=%d av1=%d",
+               caps.has_h264, caps.has_h264_10bit,
+               caps.has_hevc, caps.has_av1);
 
 done:
-    nvenc_free_functions(&nv);
-    cuda_free_functions(&cu);
+        nvenc_free_functions(&nv);
+        cuda_free_functions(&cu);
 #endif
+    }
+
+    // Single assignment publishes everything (flags + av1_device_index +
+    // probed) together -- concurrent first callers may both run the probe
+    // (harmless, identical outcome), but none can observe .probed without
+    // also observing a fully-computed av1_device_index.
+    caps.probed = 1;
+    g_nvenc_caps = caps;
 }
 
 // Returns the index of the first CUDA device that supports AV1 encode, or
@@ -252,62 +273,10 @@ done:
 // non-AV1-capable GPU's context. A GPU that lacks AV1 encode but is
 // otherwise the fastest/default device (e.g. an Ampere card alongside a
 // Blackwell one) must not win this selection.
-int hb_nvenc_default_device_index(void)
+int hb_nvenc_av1_device_index(void)
 {
-    if (g_nvenc_default_device_index != -2)
-    {
-        return g_nvenc_default_device_index;
-    }
-    g_nvenc_default_device_index = -1;
-
-    if (!hb_check_nvenc_available())
-    {
-        return g_nvenc_default_device_index;
-    }
-
-#if HB_PROJECT_FEATURE_NVENC
-    CudaFunctions  *cu = NULL;
-    NvencFunctions *nv = NULL;
-
-    if (cuda_load_functions(&cu, NULL) < 0)
-    {
-        goto done;
-    }
-    if (cu->cuInit(0) != CUDA_SUCCESS)
-    {
-        goto done;
-    }
-    if (nvenc_load_functions(&nv, NULL) < 0)
-    {
-        goto done;
-    }
-
-    int dev_count = 0;
-    cu->cuDeviceGetCount(&dev_count);
-
-    for (int i = 0; i < dev_count; i++)
-    {
-        CUdevice dev;
-        if (cu->cuDeviceGet(&dev, i) != CUDA_SUCCESS)
-        {
-            continue;
-        }
-
-        nvenc_caps_t caps = { 0 };
-        hb_nvenc_probe_device_caps(cu, nv, dev, &caps);
-        if (caps.has_av1)
-        {
-            g_nvenc_default_device_index = i;
-            break;
-        }
-    }
-
-done:
-    nvenc_free_functions(&nv);
-    cuda_free_functions(&cu);
-#endif
-
-    return g_nvenc_default_device_index;
+    hb_nvenc_probe_caps();
+    return g_nvenc_caps.av1_device_index;
 }
 
 int hb_nvenc_h264_available()

@@ -2001,6 +2001,22 @@ int hb_video_encoder_is_vaapi(int encoder)
     return HB_VCODEC_VAAPI_MASK == (encoder & HB_VCODEC_VAAPI_MASK);
 }
 
+int hb_video_encoder_is_nvenc(int encoder)
+{
+    switch (encoder)
+    {
+        case HB_VCODEC_FFMPEG_NVENC_H264:
+        case HB_VCODEC_FFMPEG_NVENC_H264_10BIT:
+        case HB_VCODEC_FFMPEG_NVENC_H265:
+        case HB_VCODEC_FFMPEG_NVENC_H265_10BIT:
+        case HB_VCODEC_FFMPEG_NVENC_AV1:
+        case HB_VCODEC_FFMPEG_NVENC_AV1_10BIT:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 int hb_video_encoder_get_count_of_analysis_passes(int encoder)
 {
     switch (encoder)
