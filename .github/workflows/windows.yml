@@ -314,6 +314,28 @@ jobs:
       with:
         path: artifacts
 
+    - name: Disambiguate identically-named x64/arm64 files
+      shell: bash
+      run: |
+        # actions/upload-artifact keeps each artifact's files under its
+        # own name, but a GitHub Release asset name is just the basename
+        # -- so the x64 and arm64 builds' raw executables (HandBrakeCLI.exe,
+        # HandBrake.exe, HandBrake.Worker.exe -- unlike the installer/zip
+        # names, which already embed the arch) collide once uploaded to
+        # the same release. Without this, softprops/action-gh-release
+        # races updating the asset it just deduped and errors out
+        # (job reports failure even though it otherwise continues), and
+        # one of the two colliding files can end up missing entirely.
+        mv artifacts/HandBrakeCLI/HandBrakeCLI.exe artifacts/HandBrakeCLI/HandBrakeCLI-x64.exe
+        mv artifacts/HandBrakeCLI_ARM64/HandBrakeCLI.exe artifacts/HandBrakeCLI_ARM64/HandBrakeCLI-arm64.exe
+
+        for f in artifacts/HandBrake-Win_GUI-x64/HandBrake.exe artifacts/HandBrake-Win_GUI-x64/HandBrake.Worker.exe; do
+          mv "$f" "${f%.exe}-x64.exe"
+        done
+        for f in artifacts/HandBrake-Win_GUI-ARM64/HandBrake.exe artifacts/HandBrake-Win_GUI-ARM64/HandBrake.Worker.exe; do
+          mv "$f" "${f%.exe}-arm64.exe"
+        done
+
     - name: Publish Release
       uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
       with:
