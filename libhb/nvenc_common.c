@@ -29,13 +29,24 @@ typedef struct {
 
 // Per-device capabilities, so device selection can be codec-aware instead
 // of always steering toward whichever device supports AV1. cc_major/minor
-// are unused in g_nvenc_agg (there's no single "compute capability" for an
+// are unused in .agg (there's no single "compute capability" for an
 // aggregate across devices) but sharing one struct type keeps this simple.
+//
+// Everything the probe computes lives in one struct, published via a
+// single assignment (see hb_nvenc_probe_caps) rather than as separate
+// globals -- multiple independent stores have no ordering guarantee
+// relative to each other on a weaker memory model (e.g. this project's
+// ARM64 CI builds), so a concurrent first caller could otherwise observe
+// .probed before the data it gates is actually visible.
 #define HB_NVENC_MAX_DEVICES 32
-static int          g_nvenc_probed    = 0;
-static int          g_nvenc_dev_count = 0;
-static nvenc_caps_t g_nvenc_dev_caps[HB_NVENC_MAX_DEVICES];
-static nvenc_caps_t g_nvenc_agg = { 0 };
+typedef struct {
+    int          probed;
+    int          dev_count;
+    nvenc_caps_t dev_caps[HB_NVENC_MAX_DEVICES];
+    nvenc_caps_t agg;
+} nvenc_probe_result_t;
+
+static nvenc_probe_result_t g_nvenc = { 0 };
 
 int hb_check_nvenc_available()
 {
@@ -194,15 +205,12 @@ done:
 
 static void hb_nvenc_probe_caps(void)
 {
-    if (g_nvenc_probed)
+    if (g_nvenc.probed)
     {
         return;
     }
 
-    int          dev_count_local = 0;
-    nvenc_caps_t dev_caps_local[HB_NVENC_MAX_DEVICES];
-    nvenc_caps_t agg_local = { 0 };
-    memset(dev_caps_local, 0, sizeof(dev_caps_local));
+    nvenc_probe_result_t result = { 0 };
 
     if (hb_check_nvenc_available())
     {
@@ -229,12 +237,12 @@ static void hb_nvenc_probe_caps(void)
         {
             dev_count = HB_NVENC_MAX_DEVICES;
         }
-        dev_count_local = dev_count;
+        result.dev_count = dev_count;
 
         // Every installed GPU can support a different codec set (e.g. an
         // Ampere card with no AV1 encode alongside a Blackwell card that
         // has it), so every device is probed individually and kept in
-        // g_nvenc_dev_caps -- callers pick a device based on the codec
+        // result.dev_caps -- callers pick a device based on the codec
         // they actually need (hb_nvenc_device_index_for_codec), not just
         // whichever device happens to be the most capable overall.
         for (int i = 0; i < dev_count; i++)
@@ -250,17 +258,17 @@ static void hb_nvenc_probe_caps(void)
             cu->cuDeviceComputeCapability(&dev_caps.cc_major,
                                            &dev_caps.cc_minor, dev);
 
-            dev_caps_local[i] = dev_caps;
+            result.dev_caps[i] = dev_caps;
 
-            agg_local.has_h264       |= dev_caps.has_h264;
-            agg_local.has_h264_10bit |= dev_caps.has_h264_10bit;
-            agg_local.has_hevc       |= dev_caps.has_hevc;
-            agg_local.has_av1        |= dev_caps.has_av1;
+            result.agg.has_h264       |= dev_caps.has_h264;
+            result.agg.has_h264_10bit |= dev_caps.has_h264_10bit;
+            result.agg.has_hevc       |= dev_caps.has_hevc;
+            result.agg.has_av1        |= dev_caps.has_av1;
         }
 
         hb_log("nvenc: caps probe -> h264=%d h264_10bit=%d hevc=%d av1=%d",
-               agg_local.has_h264, agg_local.has_h264_10bit,
-               agg_local.has_hevc, agg_local.has_av1);
+               result.agg.has_h264, result.agg.has_h264_10bit,
+               result.agg.has_hevc, result.agg.has_av1);
 
 done:
         nvenc_free_functions(&nv);
@@ -268,13 +276,12 @@ done:
 #endif
     }
 
-    // Publish the per-device array and count, then the aggregate, then
-    // the probed flag last -- so a concurrent first caller can't observe
-    // "probed" before the data it gates is fully visible.
-    memcpy(g_nvenc_dev_caps, dev_caps_local, sizeof(g_nvenc_dev_caps));
-    g_nvenc_dev_count = dev_count_local;
-    g_nvenc_agg       = agg_local;
-    g_nvenc_probed    = 1;
+    // Publish everything in one assignment: the array, count, aggregate,
+    // and probed flag are all fields of the same struct, so there's no
+    // window where a concurrent first caller could observe .probed
+    // without the data it gates also being visible.
+    result.probed = 1;
+    g_nvenc = result;
 }
 
 static int hb_nvenc_dev_supports_codec(const nvenc_caps_t *caps, int vcodec)
@@ -315,20 +322,20 @@ int hb_nvenc_device_index_for_codec(int vcodec)
     int best_major = -1;
     int best_minor = -1;
 
-    for (int i = 0; i < g_nvenc_dev_count; i++)
+    for (int i = 0; i < g_nvenc.dev_count; i++)
     {
-        if (!hb_nvenc_dev_supports_codec(&g_nvenc_dev_caps[i], vcodec))
+        if (!hb_nvenc_dev_supports_codec(&g_nvenc.dev_caps[i], vcodec))
         {
             continue;
         }
         if (best_index == -1 ||
-            g_nvenc_dev_caps[i].cc_major > best_major ||
-            (g_nvenc_dev_caps[i].cc_major == best_major &&
-             g_nvenc_dev_caps[i].cc_minor > best_minor))
+            g_nvenc.dev_caps[i].cc_major > best_major ||
+            (g_nvenc.dev_caps[i].cc_major == best_major &&
+             g_nvenc.dev_caps[i].cc_minor > best_minor))
         {
             best_index = i;
-            best_major = g_nvenc_dev_caps[i].cc_major;
-            best_minor = g_nvenc_dev_caps[i].cc_minor;
+            best_major = g_nvenc.dev_caps[i].cc_major;
+            best_minor = g_nvenc.dev_caps[i].cc_minor;
         }
     }
 
@@ -338,25 +345,25 @@ int hb_nvenc_device_index_for_codec(int vcodec)
 int hb_nvenc_h264_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_agg.has_h264;
+    return g_nvenc.agg.has_h264;
 }
 
 int hb_nvenc_h264_10bit_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_agg.has_h264_10bit;
+    return g_nvenc.agg.has_h264_10bit;
 }
 
 int hb_nvenc_h265_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_agg.has_hevc;
+    return g_nvenc.agg.has_hevc;
 }
 
 int hb_nvenc_av1_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_agg.has_av1;
+    return g_nvenc.agg.has_av1;
 }
 
 int hb_check_nvdec_available()
