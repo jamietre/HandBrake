@@ -721,16 +721,19 @@ static int DecodePreviews( hb_scan_t * data, hb_title_t * title, int flush )
         hwaccel->caps & HB_HWACCEL_CAP_SCAN &&
         hb_hwaccel_is_available(hwaccel, title->video_codec_param))
     {
-        // No job exists yet at scan time to carry an explicit adapter
-        // choice (unlike the QSV path via job->hw_device_index), so for
-        // CUDA we pick the first AV1-capable device up front. Otherwise a
-        // later AV1 NVENC encode would inherit this decode context and be
-        // bound to whatever device CUDA treats as default, which may not
-        // support AV1 (e.g. an older GPU alongside a newer one).
+        // No job exists yet at scan time, so the actual target encoder
+        // isn't known (unlike the QSV path via job->hw_device_index) --
+        // this decode-only preview context can't be routed per-codec the
+        // way the real encode job is. AV1 is used as the best available
+        // guess for which device to prefer, since it's the newest/most
+        // restrictive codec and therefore the one most likely to need
+        // routing away from a non-default device. This context is closed
+        // once previews are generated and is unrelated to the hw_device_ctx
+        // the real encode job builds later.
         int device_index = -1;
         if (hwaccel->type == AV_HWDEVICE_TYPE_CUDA)
         {
-            device_index = hb_nvenc_av1_device_index();
+            device_index = hb_nvenc_device_index_for_codec(HB_VCODEC_FFMPEG_NVENC_AV1);
         }
         hb_hwaccel_hw_device_ctx_init(hwaccel->type, device_index, &hw_device_ctx);
     }

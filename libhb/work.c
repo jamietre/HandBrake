@@ -1778,11 +1778,12 @@ static void do_job(hb_job_t *job)
     {
         #if HB_PROJECT_FEATURE_NVENC
         // Mirrors hb_qsv_setup_job(): a hw_device_index of -1 means the
-        // user didn't force an adapter, so pick the first AV1-capable GPU
-        // ourselves. Otherwise, once hardware decode binds a context, the
-        // NVENC encoder below reuses it as-is (encavcodec.c) rather than
-        // running ffmpeg's own capable-device fallback loop, so an
-        // unset/default context can land on a GPU that can't do AV1.
+        // user didn't force an adapter, so pick a device that actually
+        // supports this job's codec ourselves. Otherwise, once hardware
+        // decode binds a context, the NVENC encoder below reuses it as-is
+        // (encavcodec.c) rather than running ffmpeg's own capable-device
+        // fallback loop, so an unset/default context can land on a GPU
+        // that can't encode the requested codec at all.
         //
         // Only for NVENC encoders: hw_device_index is shared with other
         // vendors' adapter selection (e.g. QSV's child_device in
@@ -1791,7 +1792,7 @@ static void do_job(hb_job_t *job)
         if (job->hw_device_index == -1 &&
             hb_video_encoder_is_nvenc(job->vcodec))
         {
-            job->hw_device_index = hb_nvenc_av1_device_index();
+            job->hw_device_index = hb_nvenc_device_index_for_codec(job->vcodec);
         }
         #endif
     }
