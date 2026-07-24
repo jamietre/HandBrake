@@ -19,19 +19,23 @@
 static int is_nvenc_available = -1;
 
 typedef struct {
-    int probed;
     int has_h264;
     int has_h264_10bit;
     int has_hevc;
     int has_av1;
-    int av1_device_index; // -1 if has_av1 is false
+    int cc_major; // CUDA compute capability; 0 if it couldn't be queried
+    int cc_minor;
 } nvenc_caps_t;
 
-// Published via a single struct assignment (not two separate globals) so a
-// concurrent first caller can't observe .probed before av1_device_index --
-// two independent stores would have no ordering guarantee relative to each
-// other on a weaker memory model (e.g. this project's ARM64 CI builds).
-static nvenc_caps_t g_nvenc_caps = { .av1_device_index = -1 };
+// Per-device capabilities, so device selection can be codec-aware instead
+// of always steering toward whichever device supports AV1. cc_major/minor
+// are unused in g_nvenc_agg (there's no single "compute capability" for an
+// aggregate across devices) but sharing one struct type keeps this simple.
+#define HB_NVENC_MAX_DEVICES 32
+static int          g_nvenc_probed    = 0;
+static int          g_nvenc_dev_count = 0;
+static nvenc_caps_t g_nvenc_dev_caps[HB_NVENC_MAX_DEVICES];
+static nvenc_caps_t g_nvenc_agg = { 0 };
 
 int hb_check_nvenc_available()
 {
@@ -190,12 +194,15 @@ done:
 
 static void hb_nvenc_probe_caps(void)
 {
-    if (g_nvenc_caps.probed)
+    if (g_nvenc_probed)
     {
         return;
     }
 
-    nvenc_caps_t caps = { .av1_device_index = -1 };
+    int          dev_count_local = 0;
+    nvenc_caps_t dev_caps_local[HB_NVENC_MAX_DEVICES];
+    nvenc_caps_t agg_local = { 0 };
+    memset(dev_caps_local, 0, sizeof(dev_caps_local));
 
     if (hb_check_nvenc_available())
     {
@@ -218,12 +225,18 @@ static void hb_nvenc_probe_caps(void)
 
         int dev_count = 0;
         cu->cuDeviceGetCount(&dev_count);
+        if (dev_count > HB_NVENC_MAX_DEVICES)
+        {
+            dev_count = HB_NVENC_MAX_DEVICES;
+        }
+        dev_count_local = dev_count;
 
         // Every installed GPU can support a different codec set (e.g. an
         // Ampere card with no AV1 encode alongside a Blackwell card that
-        // has it), so every device must be probed and the results OR'd
-        // together. The first AV1-capable device is recorded in the same
-        // pass so device selection doesn't need a second round of probing.
+        // has it), so every device is probed individually and kept in
+        // g_nvenc_dev_caps -- callers pick a device based on the codec
+        // they actually need (hb_nvenc_device_index_for_codec), not just
+        // whichever device happens to be the most capable overall.
         for (int i = 0; i < dev_count; i++)
         {
             CUdevice dev;
@@ -234,21 +247,20 @@ static void hb_nvenc_probe_caps(void)
 
             nvenc_caps_t dev_caps = { 0 };
             hb_nvenc_probe_device_caps(cu, nv, dev, &dev_caps);
+            cu->cuDeviceComputeCapability(&dev_caps.cc_major,
+                                           &dev_caps.cc_minor, dev);
 
-            caps.has_h264       |= dev_caps.has_h264;
-            caps.has_h264_10bit |= dev_caps.has_h264_10bit;
-            caps.has_hevc       |= dev_caps.has_hevc;
-            caps.has_av1        |= dev_caps.has_av1;
+            dev_caps_local[i] = dev_caps;
 
-            if (caps.av1_device_index == -1 && dev_caps.has_av1)
-            {
-                caps.av1_device_index = i;
-            }
+            agg_local.has_h264       |= dev_caps.has_h264;
+            agg_local.has_h264_10bit |= dev_caps.has_h264_10bit;
+            agg_local.has_hevc       |= dev_caps.has_hevc;
+            agg_local.has_av1        |= dev_caps.has_av1;
         }
 
         hb_log("nvenc: caps probe -> h264=%d h264_10bit=%d hevc=%d av1=%d",
-               caps.has_h264, caps.has_h264_10bit,
-               caps.has_hevc, caps.has_av1);
+               agg_local.has_h264, agg_local.has_h264_10bit,
+               agg_local.has_hevc, agg_local.has_av1);
 
 done:
         nvenc_free_functions(&nv);
@@ -256,51 +268,95 @@ done:
 #endif
     }
 
-    // Single assignment publishes everything (flags + av1_device_index +
-    // probed) together -- concurrent first callers may both run the probe
-    // (harmless, identical outcome), but none can observe .probed without
-    // also observing a fully-computed av1_device_index.
-    caps.probed = 1;
-    g_nvenc_caps = caps;
+    // Publish the per-device array and count, then the aggregate, then
+    // the probed flag last -- so a concurrent first caller can't observe
+    // "probed" before the data it gates is fully visible.
+    memcpy(g_nvenc_dev_caps, dev_caps_local, sizeof(g_nvenc_dev_caps));
+    g_nvenc_dev_count = dev_count_local;
+    g_nvenc_agg       = agg_local;
+    g_nvenc_probed    = 1;
 }
 
-// Returns the index of the first CUDA device that supports AV1 encode, or
-// -1 if none do (or NVENC isn't available), so callers fall back to
-// whatever CUDA treats as its default device.
+static int hb_nvenc_dev_supports_codec(const nvenc_caps_t *caps, int vcodec)
+{
+    switch (vcodec)
+    {
+        case HB_VCODEC_FFMPEG_NVENC_H264:
+            return caps->has_h264;
+        case HB_VCODEC_FFMPEG_NVENC_H264_10BIT:
+            return caps->has_h264_10bit;
+        case HB_VCODEC_FFMPEG_NVENC_H265:
+        case HB_VCODEC_FFMPEG_NVENC_H265_10BIT:
+            return caps->has_hevc;
+        case HB_VCODEC_FFMPEG_NVENC_AV1:
+        case HB_VCODEC_FFMPEG_NVENC_AV1_10BIT:
+            return caps->has_av1;
+        default:
+            return 0;
+    }
+}
+
+// Returns the index of the CUDA device best suited to encode vcodec, or -1
+// if no installed device supports it (or NVENC isn't available), so
+// callers fall back to whatever CUDA treats as its default device.
 //
-// Used to pick a decode-side CUDA device up front (libhb/scan.c) so a
-// later AV1 NVENC encode on the same job doesn't get bound to a
-// non-AV1-capable GPU's context. A GPU that lacks AV1 encode but is
-// otherwise the fastest/default device (e.g. an Ampere card alongside a
-// Blackwell one) must not win this selection.
-int hb_nvenc_av1_device_index(void)
+// A device is only ever returned if it actually supports the requested
+// codec -- a device must never be chosen just because it's the newest or
+// otherwise most capable overall, since that can route a job to a device
+// that can't open it at all (e.g. a newer card that dropped a legacy
+// profile an older card still has). Among devices that do support it, the
+// one with the highest CUDA compute capability (newest architecture) is
+// preferred.
+int hb_nvenc_device_index_for_codec(int vcodec)
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_caps.av1_device_index;
+
+    int best_index = -1;
+    int best_major = -1;
+    int best_minor = -1;
+
+    for (int i = 0; i < g_nvenc_dev_count; i++)
+    {
+        if (!hb_nvenc_dev_supports_codec(&g_nvenc_dev_caps[i], vcodec))
+        {
+            continue;
+        }
+        if (best_index == -1 ||
+            g_nvenc_dev_caps[i].cc_major > best_major ||
+            (g_nvenc_dev_caps[i].cc_major == best_major &&
+             g_nvenc_dev_caps[i].cc_minor > best_minor))
+        {
+            best_index = i;
+            best_major = g_nvenc_dev_caps[i].cc_major;
+            best_minor = g_nvenc_dev_caps[i].cc_minor;
+        }
+    }
+
+    return best_index;
 }
 
 int hb_nvenc_h264_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_caps.has_h264;
+    return g_nvenc_agg.has_h264;
 }
 
 int hb_nvenc_h264_10bit_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_caps.has_h264_10bit;
+    return g_nvenc_agg.has_h264_10bit;
 }
 
 int hb_nvenc_h265_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_caps.has_hevc;
+    return g_nvenc_agg.has_hevc;
 }
 
 int hb_nvenc_av1_available()
 {
     hb_nvenc_probe_caps();
-    return g_nvenc_caps.has_av1;
+    return g_nvenc_agg.has_av1;
 }
 
 int hb_check_nvdec_available()

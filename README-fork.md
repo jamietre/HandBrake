@@ -106,25 +106,40 @@ hardware-decode-enabled path that breaks it by pre-binding a context.
    `av_hwdevice_ctx_create`), mirroring the existing QSV special-case already
    in that function.
 3. **`libhb/scan.c`** — stop hardcoding `-1` at line 723. For
-   `AV_HWDEVICE_TYPE_CUDA`, call the new `hb_nvenc_av1_device_index()`
-   (auto-picks the first CUDA device that supports AV1 encode) instead of
-   blindly using device 0.
+   `AV_HWDEVICE_TYPE_CUDA`, call `hb_nvenc_device_index_for_codec()`
+   (auto-picks a CUDA device that supports AV1 encode, preferring the
+   newest architecture among those that qualify) instead of blindly using
+   device 0. Scan time has no job yet and so doesn't know the real target
+   encoder, so AV1 is used as a best-guess bias for this decode-only
+   preview context — see the codec-aware device selection section below.
 4. **`libhb/work.c`** — bug 4 above. Added an `HB_DECODE_NVDEC` block next to
    the existing `HB_DECODE_QSV`/`hb_qsv_setup_job()` block (`work.c:1770ish`)
-   that sets `job->hw_device_index = hb_nvenc_av1_device_index()` when it's
-   still `-1` — but only when the chosen encoder is NVENC-family (checked
-   via a new `hb_video_encoder_is_nvenc()` helper in `common.c`, mirroring
-   `hb_video_encoder_is_vaapi()`). `hw_device_index` is shared with other
-   vendors' adapter selection (QSV's `child_device` in `encavcodec.c`), so
-   a CUDA ordinal must not leak into a job that encodes elsewhere.
+   that sets `job->hw_device_index = hb_nvenc_device_index_for_codec(job->vcodec)`
+   when it's still `-1` — but only when the chosen encoder is NVENC-family
+   (checked via a new `hb_video_encoder_is_nvenc()` helper in `common.c`,
+   mirroring `hb_video_encoder_is_vaapi()`). `hw_device_index` is shared
+   with other vendors' adapter selection (QSV's `child_device` in
+   `encavcodec.c`), so a CUDA ordinal must not leak into a job that
+   encodes elsewhere.
 
-New shared helper: `hb_nvenc_av1_device_index()` in `nvenc_common.c`
-(declared in `nvenc_common.h`) — returns the index of the first CUDA device
-with AV1 encode support, or `-1` if none/NVENC unavailable. The index is
-recorded during `hb_nvenc_probe_caps()`'s single pass over all devices (no
-second probe), and the cache is computed into locals and published once at
-the end, so a concurrent first call can never observe a half-written result.
-Used by both patch 3 and patch 4.
+New shared helper: `hb_nvenc_device_index_for_codec(int vcodec)` in
+`nvenc_common.c` (declared in `nvenc_common.h`) — returns the index of a
+CUDA device that actually supports the given NVENC codec, or `-1` if none
+do (or NVENC is unavailable). `hb_nvenc_probe_caps()` keeps a full
+per-device capability array (not just an OR'd aggregate) plus each
+device's CUDA compute capability, computed into locals and published once
+at the end of the probe so a concurrent first call can never observe a
+half-written result. Among devices that support the requested codec, the
+one with the highest compute capability (newest architecture) is
+preferred — but a device is never returned unless it actually supports
+that codec; there's no fallback to "the most capable device overall."
+This closes a real gap from the first version of this fix: NVIDIA has
+dropped some legacy encode profiles (e.g. 10-bit H.264) between
+generations, so blindly routing every NVENC job to the AV1-capable device
+could send a job to hardware that can't actually open it, even when a
+perfectly capable (older) GPU was sitting right there. Used by both
+patch 3 (hardcoded to AV1, since scan time doesn't know the real codec)
+and patch 4 (parameterized by the job's actual `vcodec`).
 
 A `--nvenc-adapter` CLI flag mirroring `--qsv-adapter` would be a nice-to-have
 follow-up for explicit manual control, not implemented — v1 auto-picks.
@@ -303,16 +318,7 @@ fix.
 
 ### Known limitations
 
-- **Device selection is AV1-specific, not codec-aware.** The shared device
-  picker always steers CUDA hardware decode (and any NVENC encode) toward
-  the first AV1-capable GPU, even for pure HEVC/H.264 NVENC jobs, or for
-  decode-only jobs paired with a non-NVENC encoder. On a system where the
-  AV1-capable card isn't also the best HEVC/H.264 encoder, non-AV1 jobs
-  would still get steered to it for no codec-relevant reason. Not an issue
-  on the 2-GPU setup this fix targets (no third option to prefer), but a
-  real scope narrowing worth knowing about before generalizing this beyond
-  a 2-GPU box.
-- **No multi-GPU load balancing.** The AV1-capable device index is a
+- **No multi-GPU load balancing.** Device selection is a
   single process-wide value — concurrent jobs on a system with 2+
   AV1-capable GPUs all pin to whichever is found first, not split across
   them. No `--nvenc-adapter`-style override exists to control this.
