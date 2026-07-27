@@ -139,6 +139,25 @@ hb_hwaccel_t * hb_get_hwaccel_from_pix_fmt(enum AVPixelFormat hw_pix_fmt)
     return NULL;
 }
 
+int hb_hwaccel_supports_encoder(hb_hwaccel_t *hwaccel, int encoder)
+{
+    if (hwaccel == NULL)
+    {
+        return 0;
+    }
+
+    const int *encoders = hwaccel->encoders;
+    while (*encoders != HB_VCODEC_INVALID)
+    {
+        if (*encoders == encoder)
+        {
+            return 1;
+        }
+        encoders++;
+    }
+    return 0;
+}
+
 static int is_rotation_supported(hb_hwaccel_t *hwaccel, int rotation)
 {
     return rotation != HB_ROTATION_0 && (hwaccel->caps & HB_HWACCEL_CAP_ROTATE) == 0 ? 0 : 1;
@@ -187,24 +206,6 @@ int hb_hwaccel_is_available(hb_hwaccel_t *hwaccel, int codec_id)
     const AVCodecHWConfig *config = get_hw_config(codec, hwaccel->type);
 
     return config != NULL;
-}
-
-int hb_hwaccel_supports_encoder(hb_hwaccel_t *hwaccel, int vcodec)
-{
-    if (hwaccel == NULL)
-    {
-        return 0;
-    }
-
-    for (int i = 0; hwaccel->encoders[i] != HB_VCODEC_INVALID; i++)
-    {
-        if (hwaccel->encoders[i] == vcodec)
-        {
-            return 1;
-        }
-    }
-
-    return 0;
 }
 
 enum AVPixelFormat hw_hwaccel_get_hw_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts)
