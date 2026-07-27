@@ -10,7 +10,6 @@
 #include "handbrake/handbrake.h"
 #include "handbrake/hbffmpeg.h"
 #include "handbrake/hwaccel.h"
-#include "handbrake/nvenc_common.h"
 
 typedef struct
 {
@@ -722,20 +721,16 @@ static int DecodePreviews( hb_scan_t * data, hb_title_t * title, int flush )
         hb_hwaccel_is_available(hwaccel, title->video_codec_param))
     {
         // No job exists yet at scan time, so the actual target encoder
-        // isn't known (unlike the QSV path via job->hw_device_index) --
-        // this decode-only preview context can't be routed per-codec the
-        // way the real encode job is. AV1 is used as the best available
-        // guess for which device to prefer, since it's the newest/most
-        // restrictive codec and therefore the one most likely to need
-        // routing away from a non-default device. This context is closed
-        // once previews are generated and is unrelated to the hw_device_ctx
-        // the real encode job builds later.
-        int device_index = -1;
-        if (hwaccel->type == AV_HWDEVICE_TYPE_CUDA)
-        {
-            device_index = hb_nvenc_device_index_for_codec(HB_VCODEC_FFMPEG_NVENC_AV1);
-        }
-        hb_hwaccel_hw_device_ctx_init(hwaccel->type, device_index, &hw_device_ctx);
+        // isn't known -- unlike the real encode job (work.c), this
+        // decode-only preview context can't be routed by codec. That's
+        // fine: video_decode_support (decavcodec.c) is derived from the
+        // decoded pixel format, not from which device index was used, and
+        // this context is fully closed at the end of this function, never
+        // reused by or leaked into the real job's own context. So there's
+        // nothing to gain by guessing a codec here -- just take whatever
+        // device the driver treats as default, same as every other
+        // hwaccel type already does in this spot.
+        hb_hwaccel_hw_device_ctx_init(hwaccel->type, -1, &hw_device_ctx);
     }
 
     hb_work_object_t *vid_decoder = hb_get_work(data->h, title->video_codec);
