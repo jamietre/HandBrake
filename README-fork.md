@@ -112,15 +112,16 @@ hardware-decode-enabled path that breaks it by pre-binding a context.
    device 0. Scan time has no job yet and so doesn't know the real target
    encoder, so AV1 is used as a best-guess bias for this decode-only
    preview context — see the codec-aware device selection section below.
-4. **`libhb/work.c`** — bug 4 above. Added an `HB_DECODE_NVDEC` block next to
-   the existing `HB_DECODE_QSV`/`hb_qsv_setup_job()` block (`work.c:1770ish`)
-   that sets `job->hw_device_index = hb_nvenc_device_index_for_codec(job->vcodec)`
-   when it's still `-1` — but only when the chosen encoder is NVENC-family
-   (checked via a new `hb_video_encoder_is_nvenc()` helper in `common.c`,
-   mirroring `hb_video_encoder_is_vaapi()`). `hw_device_index` is shared
+4. **`libhb/work.c`** — bug 4 above. Next to the existing
+   `HB_DECODE_QSV`/`hb_qsv_setup_job()` block, a generic dispatch now sets
+   `job->hw_device_index` via whichever hwaccel backend is active for the
+   job (`hb_get_hwaccel(job->hw_decode)->get_device_index_for_codec`), when
+   it's still `-1` and that backend's `.encoders[]` list includes the job's
+   codec (`hb_hwaccel_supports_encoder()`). `hw_device_index` is shared
    with other vendors' adapter selection (QSV's `child_device` in
    `encavcodec.c`), so a CUDA ordinal must not leak into a job that
-   encodes elsewhere.
+   encodes elsewhere — see "Generalizing device selection" below for why
+   this isn't NVENC-specific glue anymore.
 
 New shared helper: `hb_nvenc_device_index_for_codec(int vcodec)` in
 `nvenc_common.c` (declared in `nvenc_common.h`) — returns the index of a
@@ -133,13 +134,35 @@ half-written result. Among devices that support the requested codec, the
 one with the highest compute capability (newest architecture) is
 preferred — but a device is never returned unless it actually supports
 that codec; there's no fallback to "the most capable device overall."
-This closes a real gap from the first version of this fix: NVIDIA has
-dropped some legacy encode profiles (e.g. 10-bit H.264) between
-generations, so blindly routing every NVENC job to the AV1-capable device
-could send a job to hardware that can't actually open it, even when a
-perfectly capable (older) GPU was sitting right there. Used by both
+This closes a real gap from the first version of this fix: NVIDIA has been
+known to vary NVENC encode-profile support across generations (in either
+direction — e.g. on this fork's own dual-GPU test hardware, the newer
+Blackwell card supports 10-bit H.264 NVENC and the older Ampere card
+doesn't, though the reverse — an older card supporting a legacy profile a
+newer one dropped — is the documented case for other generation pairs), so
+blindly routing every NVENC job to the AV1-capable device could send a job
+to hardware that can't actually open it, even when a perfectly capable
+(differently-generationed) GPU was sitting right there. Used by both
 patch 3 (hardcoded to AV1, since scan time doesn't know the real codec)
 and patch 4 (parameterized by the job's actual `vcodec`).
+
+### Generalizing device selection into the existing hwaccel vtable
+
+External review feedback on this device-selection work: it added a second
+vendor-specific conditional block in `libhb/work.c` sitting next to QSV's
+existing one, repeating a pattern already flagged as too encoder-specific.
+Fix: `struct hb_hwaccel_s` — the dispatch table HandBrake already uses per
+hwaccel backend for `can_filter`/`find_decoder`/`upload` — gained a new
+optional slot, `get_device_index_for_codec(int vcodec)`. NVENC registers
+its real implementation there; QSV registers a thin wrapper around its
+existing default-adapter logic, proving the slot genuinely generalizes
+across vendors (QSV's own job setup still runs through its existing,
+separate path — this doesn't change QSV's behavior). `work.c` now
+dispatches through this generically instead of growing a per-vendor `if`
+block for every backend that adds device selection. The NVENC-specific
+`hb_video_encoder_is_nvenc()` guard was likewise replaced by a generic
+`hb_hwaccel_supports_encoder()` check against each hwaccel's existing
+`.encoders[]` list.
 
 A `--nvenc-adapter` CLI flag mirroring `--qsv-adapter` would be a nice-to-have
 follow-up for explicit manual control, not implemented — v1 auto-picks.
