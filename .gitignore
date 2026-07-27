@@ -25,6 +25,7 @@ macosx/**/xcshareddata/IDEWorkspaceChecks.plist
 build/
 build.*/
 download/
+toolchains/
 
 # Gtk
 gtk/ABOUT-NLS
