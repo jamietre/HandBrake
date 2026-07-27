@@ -139,20 +139,6 @@ hb_hwaccel_t * hb_get_hwaccel_from_pix_fmt(enum AVPixelFormat hw_pix_fmt)
     return NULL;
 }
 
-static int is_encoder_supported(hb_hwaccel_t *hwaccel, int encoder)
-{
-    const int *encoders = hwaccel->encoders;
-    while (*encoders != HB_VCODEC_INVALID)
-    {
-        if (*encoders == encoder)
-        {
-            return 1;
-        }
-        encoders++;
-    }
-    return 0;
-}
-
 static int is_rotation_supported(hb_hwaccel_t *hwaccel, int rotation)
 {
     return rotation != HB_ROTATION_0 && (hwaccel->caps & HB_HWACCEL_CAP_ROTATE) == 0 ? 0 : 1;
@@ -169,7 +155,7 @@ int hb_hwaccel_can_use_full_hw_pipeline(hb_hwaccel_t *hwaccel, hb_list_t *list_f
         hwaccel->can_filter(list_filter) &&
         is_rotation_supported(hwaccel, rotation) &&
         is_color_range_supported(hwaccel, color_range) &&
-        is_encoder_supported(hwaccel, encoder);
+        hb_hwaccel_supports_encoder(hwaccel, encoder);
 }
 
 const AVCodecHWConfig *get_hw_config(const AVCodec *codec, enum AVHWDeviceType device_type)
