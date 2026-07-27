@@ -105,13 +105,17 @@ hardware-decode-enabled path that breaks it by pre-binding a context.
    index as the actual CUDA device string (3rd arg to
    `av_hwdevice_ctx_create`), mirroring the existing QSV special-case already
    in that function.
-3. **`libhb/scan.c`** — stop hardcoding `-1` at line 723. For
-   `AV_HWDEVICE_TYPE_CUDA`, call `hb_nvenc_device_index_for_codec()`
-   (auto-picks a CUDA device that supports AV1 encode, preferring the
-   newest architecture among those that qualify) instead of blindly using
-   device 0. Scan time has no job yet and so doesn't know the real target
-   encoder, so AV1 is used as a best-guess bias for this decode-only
-   preview context — see the codec-aware device selection section below.
+3. **`libhb/scan.c`** — the scan-time preview-decode context still passes
+   `-1` for CUDA, same as before this fork and same as every other
+   hwaccel type. An earlier revision of this patch had this guess a codec
+   (AV1) to search devices by, since scan time has no job yet and doesn't
+   know the real target encoder — but that guess turned out to be
+   protecting against nothing: `video_decode_support` is derived from the
+   decoded pixel format, not which device scan used, and this context is
+   fully closed before `DecodePreviews()` returns, never reaching the real
+   job's own context in `work.c`. Dropped entirely rather than tuned,
+   since there's no codec that's reliably "least likely to be universal"
+   forever — see the codec-aware device selection section below.
 4. **`libhb/work.c`** — bug 4 above. Next to the existing
    `HB_DECODE_QSV`/`hb_qsv_setup_job()` block, a generic dispatch now sets
    `job->hw_device_index` via whichever hwaccel backend is active for the
@@ -142,9 +146,9 @@ doesn't, though the reverse — an older card supporting a legacy profile a
 newer one dropped — is the documented case for other generation pairs), so
 blindly routing every NVENC job to the AV1-capable device could send a job
 to hardware that can't actually open it, even when a perfectly capable
-(differently-generationed) GPU was sitting right there. Used by both
-patch 3 (hardcoded to AV1, since scan time doesn't know the real codec)
-and patch 4 (parameterized by the job's actual `vcodec`).
+(differently-generationed) GPU was sitting right there. Used by patch 4
+(parameterized by the job's actual `vcodec`) — patch 3 (scan.c) no longer
+calls this at all, see above.
 
 ### Generalizing device selection into the existing hwaccel vtable
 
