@@ -15,7 +15,6 @@
 #include "handbrake/dovi_common.h"
 #include "handbrake/rpu.h"
 #include "handbrake/hwaccel.h"
-#include "handbrake/nvenc_common.h"
 
 #if HB_PROJECT_FEATURE_QSV
 #include "handbrake/qsv_common.h"
@@ -1774,27 +1773,25 @@ static void do_job(hb_job_t *job)
         hb_qsv_setup_job(job);
         #endif
     }
-    if (job->hw_decode & HB_DECODE_NVDEC)
+    else if (job->hw_device_index == -1)
     {
-        #if HB_PROJECT_FEATURE_NVENC
-        // Mirrors hb_qsv_setup_job(): a hw_device_index of -1 means the
-        // user didn't force an adapter, so pick a device that actually
-        // supports this job's codec ourselves. Otherwise, once hardware
-        // decode binds a context, the NVENC encoder below reuses it as-is
-        // (encavcodec.c) rather than running ffmpeg's own capable-device
-        // fallback loop, so an unset/default context can land on a GPU
-        // that can't encode the requested codec at all.
+        // Generic per-vendor device selection: any hwaccel backend that
+        // registers get_device_index_for_codec picks its own device here,
+        // so adding one doesn't mean growing another vendor-specific
+        // conditional block in work.c (QSV keeps its own path above since
+        // hb_qsv_setup_job() does more than device selection alone).
         //
-        // Only for NVENC encoders: hw_device_index is shared with other
-        // vendors' adapter selection (e.g. QSV's child_device in
-        // encavcodec.c), so a CUDA ordinal must not leak into a job that
-        // encodes elsewhere.
-        if (job->hw_device_index == -1 &&
-            hb_video_encoder_is_nvenc(job->vcodec))
+        // hb_hwaccel_supports_encoder() guards this the same way the old
+        // NVENC-only check did: hw_device_index is shared across vendors'
+        // adapter selection (e.g. QSV's child_device in encavcodec.c), so
+        // an ordinal from one backend must not leak into a job that's
+        // actually encoding with a different one.
+        hb_hwaccel_t *hwaccel = hb_get_hwaccel(job->hw_decode);
+        if (hwaccel && hwaccel->get_device_index_for_codec &&
+            hb_hwaccel_supports_encoder(hwaccel, job->vcodec))
         {
-            job->hw_device_index = hb_nvenc_device_index_for_codec(job->vcodec);
+            job->hw_device_index = hwaccel->get_device_index_for_codec(job->vcodec);
         }
-        #endif
     }
 
     // This must be performed before initializing filters because

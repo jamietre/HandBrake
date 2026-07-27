@@ -261,6 +261,15 @@ struct hb_hwaccel_s
     void *        (*find_decoder) (int codec_param);
     hb_buffer_t * (*upload)       (void *hw_frames_ctx, hb_buffer_t **buf_in);
 
+    // Optional: picks a device index for this backend's own hardware,
+    // given the codec a job wants to encode with (or a backend-specific
+    // default if it doesn't select per-codec). NULL if the backend
+    // doesn't support device selection at all. Letting each backend
+    // register its own implementation here means work.c dispatches
+    // through this generically instead of growing a new per-vendor
+    // conditional block every time a backend adds this capability.
+    int           (*get_device_index_for_codec)(int vcodec);
+
     int caps;
 };
 
@@ -560,7 +569,6 @@ const char* const* hb_video_encoder_get_profiles(int encoder);
 const char* const* hb_video_encoder_get_levels  (int encoder);
 const int*         hb_video_encoder_get_pix_fmts(int encoder, const char *profile);
 int                hb_video_encoder_is_vaapi(int encoder);
-int                hb_video_encoder_is_nvenc(int encoder);
 
 
 void  hb_audio_quality_get_limits(uint32_t codec, float *low, float *high, float *granularity, int *direction);

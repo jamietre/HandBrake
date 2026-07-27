@@ -3888,6 +3888,17 @@ static const int qsv_encoders[] =
     HB_VCODEC_INVALID
 };
 
+// QSV doesn't select a device per-codec today -- hb_qsv_setup_job() already
+// covers device selection (including a user-forced adapter) for the actual
+// QSV job path, so this only exists to give hb_hwaccel_qsv a working
+// get_device_index_for_codec, proving the vtable slot genuinely generalizes
+// across backends rather than being an NVENC-only abstraction.
+static int hb_qsv_device_index_for_codec(int vcodec)
+{
+    (void)vcodec;
+    return hb_qsv_get_default_adapter_index();
+}
+
 hb_hwaccel_t hb_hwaccel_qsv =
 {
     .id           = HB_DECODE_QSV,
@@ -3897,6 +3908,7 @@ hb_hwaccel_t hb_hwaccel_qsv =
     .hw_pix_fmt   = AV_PIX_FMT_QSV,
     .can_filter   = are_filters_supported,
     .find_decoder = find_decoder,
+    .get_device_index_for_codec = hb_qsv_device_index_for_codec,
     .caps         = HB_HWACCEL_CAP_ROTATE | HB_HWACCEL_CAP_COLOR_RANGE
 };
 

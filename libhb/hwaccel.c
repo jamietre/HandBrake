@@ -203,6 +203,24 @@ int hb_hwaccel_is_available(hb_hwaccel_t *hwaccel, int codec_id)
     return config != NULL;
 }
 
+int hb_hwaccel_supports_encoder(hb_hwaccel_t *hwaccel, int vcodec)
+{
+    if (hwaccel == NULL)
+    {
+        return 0;
+    }
+
+    for (int i = 0; hwaccel->encoders[i] != HB_VCODEC_INVALID; i++)
+    {
+        if (hwaccel->encoders[i] == vcodec)
+        {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 enum AVPixelFormat hw_hwaccel_get_hw_format(AVCodecContext *ctx, const enum AVPixelFormat *pix_fmts)
 {
     const hb_job_t *job = ctx->opaque;

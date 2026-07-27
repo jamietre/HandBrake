@@ -449,5 +449,6 @@ hb_hwaccel_t hb_hwaccel_nvdec =
     .type       = AV_HWDEVICE_TYPE_CUDA,
     .hw_pix_fmt = AV_PIX_FMT_CUDA,
     .can_filter = hb_nvenc_are_filters_supported,
+    .get_device_index_for_codec = hb_nvenc_device_index_for_codec,
     .caps       = HB_HWACCEL_CAP_SCAN | HB_HWACCEL_CAP_COLOR_RANGE
 };
