@@ -61,7 +61,7 @@ namespace HandBrake.Interop.Interop.HbLib
         public const uint HB_VCODEC_FFMPEG_QSV_H265 = (0x00000061 | HB_VCODEC_QSV_MASK | HB_VCODEC_H265_MASK);
         public const uint HB_VCODEC_FFMPEG_QSV_H265_10BIT = (0x00000062 | HB_VCODEC_QSV_MASK | HB_VCODEC_H265_MASK);
         public const uint HB_VCODEC_FFMPEG_QSV_AV1 = (0x00000070 | HB_VCODEC_QSV_MASK | HB_VCODEC_AV1_MASK);
-        public const uint HB_VCODEC_FFMPEG_QSV_AV1_10BIT = (0x08000071 | HB_VCODEC_QSV_MASK | HB_VCODEC_AV1_MASK);
+        public const uint HB_VCODEC_FFMPEG_QSV_AV1_10BIT = (0x00000071 | HB_VCODEC_QSV_MASK | HB_VCODEC_AV1_MASK);
 
         // Muxers
         public const uint HB_MUX_MASK_MP4 = 0x030000;
@@ -80,8 +80,9 @@ namespace HandBrake.Interop.Interop.HbLib
         public const uint HB_DECODE_NVDEC = 0x04;
         public const uint HB_DECODE_VIDEOTOOLBOX = 0x08;
         public const uint HB_DECODE_MF = 0x10;
+        public const uint HB_DECODE_AMFDEC = 0x20;
 
-        public const uint HB_DECODE_HWACCEL = (HB_DECODE_NVDEC | HB_DECODE_VIDEOTOOLBOX | HB_DECODE_QSV | HB_DECODE_MF);
+        public const uint HB_DECODE_HWACCEL = (HB_DECODE_NVDEC | HB_DECODE_VIDEOTOOLBOX | HB_DECODE_QSV | HB_DECODE_MF | HB_DECODE_AMFDEC);
         public const uint HB_DECODE_FORCE_HW = 0x80000000;
 
     }

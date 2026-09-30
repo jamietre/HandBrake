@@ -69,8 +69,14 @@ hb_avfilter_graph_init(hb_value_t * settings, hb_filter_init_t * init)
     avfilter_graph_set_auto_convert(graph->avgraph, AVFILTER_AUTO_CONVERT_NONE);
 #endif
 
-    // Build filter input
+    // FIXME: AVCOL_SPC_IPT_C2 is not well supported
+    // by filter graph link negotiation yet
+    if (init->color_matrix == AVCOL_SPC_IPT_C2)
+    {
+        init->color_matrix = AVCOL_SPC_UNSPECIFIED;
+    }
 
+    // Build filter input
     if (init->hw_pix_fmt != AV_PIX_FMT_NONE)
     {
         par = av_buffersrc_parameters_alloc();
@@ -176,7 +182,7 @@ hb_avfilter_graph_init(hb_value_t * settings, hb_filter_init_t * init)
         goto fail;
     }
 
-#if HB_DEBUG_GRAPHHB_DEBUG_GRAPH
+#if HB_DEBUG_GRAPH
     char *dump = avfilter_graph_dump(graph->avgraph, NULL);
     hb_log("\n%s", dump);
     free(dump);
@@ -234,17 +240,17 @@ hb_avfilter_audio_graph_init(hb_value_t *settings, hb_filter_init_t *init)
         goto fail;
     }
 
-    // Build abuffer source filter args using AVChannelLayout API (FFmpeg 8+)
-    char ch_layout_str[64];
-    hb_layout_get_name(&init->ch_layout, ch_layout_str, sizeof(ch_layout_str));
-
-    // Append aformat to ensure output matches what HB expects:
-    // packed float, and optionally constrain the channel layout
-    full_settings = hb_strdup_printf("%s,aformat=sample_fmts=flt",
-                                    graph->settings);
+    // Append aformat to ensure output matches what HB expects
+    full_settings = hb_strdup_printf("%s,aformat=sample_fmts=flt:sample_rates=%d",
+                                    graph->settings, init->samplerate);
 
     free(graph->settings);
     graph->settings = strdup(full_settings);
+
+
+    // Build abuffer source filter args using AVChannelLayout API (FFmpeg 8+)
+    char ch_layout_str[64];
+    hb_layout_get_name(&init->ch_layout, ch_layout_str, sizeof(ch_layout_str));
 
     filter_args = hb_strdup_printf(
                                    "sample_rate=%d:sample_fmt=%s:channel_layout=%s"
@@ -430,7 +436,6 @@ int hb_audio_avfilter_add_buf(hb_avfilter_graph_t *graph, hb_buffer_t **buf_in)
         hb_buffer_t *buf = *buf_in;
         AVFrame *frame = graph->frame;
 
-        av_frame_unref(frame);
         frame->nb_samples     = buf->size / (sizeof(float) * graph->in_ch_layout.nb_channels);
         frame->format         = AV_SAMPLE_FMT_FLT;
         frame->sample_rate    = graph->in_samplerate;
@@ -626,8 +631,17 @@ void hb_avfilter_audio_combine(hb_list_t *list)
         hb_filter_private_t *pv = filter->private_data;
         switch (filter->id)
         {
-            case HB_AUDIO_FILTER_ACOMPRESSOR:
+            case HB_AUDIO_FILTER_ADECLICK:
+            case HB_AUDIO_FILTER_ADECLIP:
+            case HB_AUDIO_FILTER_AFFTDN:
+            case HB_AUDIO_FILTER_ANLMDN:
+            case HB_AUDIO_FILTER_DIALOGUENHANCE:
+            case HB_AUDIO_FILTER_CROSSFEED:
+            case HB_AUDIO_FILTER_STEREOWIDEN:
+            case HB_AUDIO_FILTER_LOUDNORM:
             case HB_AUDIO_FILTER_AGATE:
+            case HB_AUDIO_FILTER_ACOMPRESSOR:
+            case HB_AUDIO_FILTER_ALIMITER:
             {
                 settings = pv->avfilters;
             } break;

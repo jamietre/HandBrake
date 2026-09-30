@@ -13,6 +13,7 @@ namespace HandBrake.Interop.Interop
     using System.Collections.Generic;
     using System.Linq;
     using System.Runtime.InteropServices;
+    using System.Text;
     using System.Text.Json;
 
     using HandBrake.Interop.Interop.HbLib;
@@ -26,6 +27,51 @@ namespace HandBrake.Interop.Interop
     /// </summary>
     public class HandBrakeFilterHelpers
     {
+        public static List<HBFilter> GetHandBrakeFilters()
+        {
+            // Note, it would be nice to get this from LibHB at some point.
+            List<HBFilter> filters = new List<HBFilter>();
+            
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_DETELECINE, "detelecine"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_COMB_DETECT, "combdetect"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_DECOMB, "decomb", "Deinterlace"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_YADIF, "yadif", "Deinterlace"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_BWDIF, "bwdif", "Deinterlace"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_DEBLOCK, "deblock"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_DEBAND, "deband"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_BM3D, "bm3d", "Denoise"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_NLMEANS, "nlmeans", "Denoise"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_HQDN3D, "hqdn3d", "Denoise"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_CHROMA_SMOOTH, "chromasmooth"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_LAPSHARP, "lapsharp", "Sharpen"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_UNSHARP, "unsharp", "Sharpen"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_GRAYSCALE, "grayscale"));
+            filters.Add(new HBFilter((int)hb_filter_ids.HB_FILTER_COLORSPACE, "colourspace"));
+
+            return filters;
+        }
+
+
+        public static List<HBFilter> GetHandBrakeAudioFilters()
+        {
+            // Note, it would be nice to get this from LibHB at some point.
+            List<HBFilter> filters = new List<HBFilter>();
+
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_ADECLICK, "adeclick"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_ADECLIP, "adeclip"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_AFFTDN, "afftdn"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_ANLMDN, "anlmdn"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_AGATE, "agate"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_ACOMPRESSOR, "acompressor"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_ALIMITER, "alimiter"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_DIALOGUENHANCE, "dialoguenhance"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_CROSSFEED, "crossfeed"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_STEREOWIDEN, "stereowiden"));
+            filters.Add(new HBFilter((int)hb_audio_filter_ids.HB_AUDIO_FILTER_LOUDNORM, "loudnorm"));
+
+            return filters;
+        }
+        
         /// <summary>
         /// The get filter presets.
         /// </summary>
@@ -129,6 +175,27 @@ namespace HandBrake.Interop.Interop
             IntPtr ptr = HBFunctions.hb_generate_filter_settings_json(filter, presetName, null, null);
             string result = Marshal.PtrToStringAnsi(ptr);
             return JsonSerializer.Deserialize<Dictionary<string, object>>(result, JsonSettings.Options);
+        }
+
+        public static string GetDefaultCustomSettingsStr(int filter)
+        {
+            var defaultSettings = GetDefaultCustomSettings(filter);
+
+            StringBuilder sb = new StringBuilder();
+
+            foreach (KeyValuePair<string, object> setting in defaultSettings)
+            {
+                if (sb.Length > 0)
+                {
+                    sb.Append(":");
+                }
+
+                sb.Append(setting.Key);
+                sb.Append("=");
+                sb.Append(setting.Value);
+            }
+
+            return sb.ToString();
         }
 
         public static string GenerateFilterSettingJson(int filterId, string preset, string tune, string custom)

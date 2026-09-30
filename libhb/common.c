@@ -2775,6 +2775,7 @@ int hb_mixdown_has_codec_support(int mixdown, uint32_t codec)
                     (mixdown == HB_AMIXDOWN_3POINT0)   ||
                     (mixdown == HB_AMIXDOWN_4POINT0)   ||
                     (mixdown == HB_AMIXDOWN_5POINT1)   ||
+                    (mixdown == HB_AMIXDOWN_6POINT1)   ||
                     (mixdown == HB_AMIXDOWN_7POINT1));
 
         case HB_ACODEC_FFAAC:
@@ -2782,7 +2783,9 @@ int hb_mixdown_has_codec_support(int mixdown, uint32_t codec)
                     (mixdown == HB_AMIXDOWN_3POINT0)   ||
                     (mixdown == HB_AMIXDOWN_4POINT0)   ||
                     (mixdown == HB_AMIXDOWN_QUAD)      ||
-                    (mixdown == HB_AMIXDOWN_5POINT1));
+                    (mixdown == HB_AMIXDOWN_5POINT1)   ||
+                    (mixdown == HB_AMIXDOWN_6POINT1)   ||
+                    (mixdown == HB_AMIXDOWN_7POINT1));
 
         case HB_ACODEC_FFALAC:
         case HB_ACODEC_FFALAC24:
@@ -5135,7 +5138,7 @@ void hb_job_close( hb_job_t ** _j )
     {
         job_clean(*_j);
         free( *_j );
-        _j = NULL;
+        *_j = NULL;
     }
 }
 
@@ -5472,12 +5475,48 @@ hb_filter_object_t * hb_filter_get( int filter_id )
             break;
 #endif
 
-        case HB_AUDIO_FILTER_ACOMPRESSOR:
-            filter = &hb_filter_acompressor;
+        case HB_AUDIO_FILTER_ADECLICK:
+            filter = &hb_filter_adeclick;
+            break;
+
+        case HB_AUDIO_FILTER_ADECLIP:
+            filter = &hb_filter_adeclip;
+            break;
+
+        case HB_AUDIO_FILTER_AFFTDN:
+            filter = &hb_filter_afftdn;
+            break;
+
+        case HB_AUDIO_FILTER_ANLMDN:
+            filter = &hb_filter_anlmdn;
             break;
 
         case HB_AUDIO_FILTER_AGATE:
             filter = &hb_filter_agate;
+            break;
+
+        case HB_AUDIO_FILTER_ACOMPRESSOR:
+            filter = &hb_filter_acompressor;
+            break;
+
+        case HB_AUDIO_FILTER_ALIMITER:
+            filter = &hb_filter_alimiter;
+            break;
+
+        case HB_AUDIO_FILTER_DIALOGUENHANCE:
+            filter = &hb_filter_dialoguenhance;
+            break;
+
+        case HB_AUDIO_FILTER_CROSSFEED:
+            filter = &hb_filter_crossfeed;
+            break;
+
+        case HB_AUDIO_FILTER_STEREOWIDEN:
+            filter = &hb_filter_stereowiden;
+            break;
+
+        case HB_AUDIO_FILTER_LOUDNORM:
+            filter = &hb_filter_loudnorm;
             break;
 
         case HB_AUDIO_FILTER_AVFILTER:
@@ -5863,6 +5902,17 @@ int hb_filter_get_from_name(const char *name)
     }
 
     return filter != NULL ? filter->id : HB_FILTER_INVALID;
+}
+
+const char * hb_filter_get_name(int filter_id)
+{
+    hb_filter_object_t *filter = hb_filter_get(filter_id);
+    if (filter)
+    {
+        return filter->name;
+    }
+
+    return "invalid";
 }
 
 const char * hb_filter_get_short_name(int filter_id)

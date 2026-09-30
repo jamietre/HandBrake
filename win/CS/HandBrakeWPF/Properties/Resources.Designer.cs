@@ -311,6 +311,15 @@ namespace HandBrakeWPF.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Track Settings.
+        /// </summary>
+        public static string AudioAdvancedView_Title {
+            get {
+                return ResourceManager.GetString("AudioAdvancedView_Title", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to All Matching Selected Languages.
         /// </summary>
         public static string AudioBehaviourModes_AllMatching {
@@ -703,6 +712,33 @@ namespace HandBrakeWPF.Properties {
         public static string AudioViewModel_SwitchBackToTracks {
             get {
                 return ResourceManager.GetString("AudioViewModel_SwitchBackToTracks", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Custom options for this filter..
+        /// </summary>
+        public static string AVFilterView_CustomOptionsTooltip {
+            get {
+                return ResourceManager.GetString("AVFilterView_CustomOptionsTooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Presets for this filter..
+        /// </summary>
+        public static string AVFilterView_PresetTooltip {
+            get {
+                return ResourceManager.GetString("AVFilterView_PresetTooltip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Tunes for this filter..
+        /// </summary>
+        public static string AVFilterView_TuneTooltip {
+            get {
+                return ResourceManager.GetString("AVFilterView_TuneTooltip", resourceCulture);
             }
         }
         
@@ -1340,6 +1376,276 @@ namespace HandBrakeWPF.Properties {
         }
         
         /// <summary>
+        ///   Looks up a localized string similar to Compressor.
+        /// </summary>
+        public static string Filter_acompressor {
+            get {
+                return ResourceManager.GetString("Filter_acompressor", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Declick.
+        /// </summary>
+        public static string Filter_adeclick {
+            get {
+                return ResourceManager.GetString("Filter_adeclick", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Declip.
+        /// </summary>
+        public static string Filter_adeclip {
+            get {
+                return ResourceManager.GetString("Filter_adeclip", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to FFT Denoiser.
+        /// </summary>
+        public static string Filter_afftdn {
+            get {
+                return ResourceManager.GetString("Filter_afftdn", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Noise Gate.
+        /// </summary>
+        public static string Filter_agate {
+            get {
+                return ResourceManager.GetString("Filter_agate", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Limiter.
+        /// </summary>
+        public static string Filter_alimiter {
+            get {
+                return ResourceManager.GetString("Filter_alimiter", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to NLMeans Denoiser.
+        /// </summary>
+        public static string Filter_anlmdn {
+            get {
+                return ResourceManager.GetString("Filter_anlmdn", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to BM3D.
+        /// </summary>
+        public static string Filter_bm3d {
+            get {
+                return ResourceManager.GetString("Filter_bm3d", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Bwdif.
+        /// </summary>
+        public static string Filter_bwdif {
+            get {
+                return ResourceManager.GetString("Filter_bwdif", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Deinterlace.
+        /// </summary>
+        public static string Filter_Category_Deinterlace {
+            get {
+                return ResourceManager.GetString("Filter_Category_Deinterlace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Denoise.
+        /// </summary>
+        public static string Filter_Category_Denoise {
+            get {
+                return ResourceManager.GetString("Filter_Category_Denoise", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Sharpen.
+        /// </summary>
+        public static string Filter_Category_Sharpen {
+            get {
+                return ResourceManager.GetString("Filter_Category_Sharpen", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Chroma Smooth.
+        /// </summary>
+        public static string Filter_chromasmooth {
+            get {
+                return ResourceManager.GetString("Filter_chromasmooth", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Colourspace.
+        /// </summary>
+        public static string Filter_colourspace {
+            get {
+                return ResourceManager.GetString("Filter_colourspace", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Comb Detect.
+        /// </summary>
+        public static string Filter_combdetect {
+            get {
+                return ResourceManager.GetString("Filter_combdetect", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Compressor.
+        /// </summary>
+        public static string Filter_compressor {
+            get {
+                return ResourceManager.GetString("Filter_compressor", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Headphone Crossfeed.
+        /// </summary>
+        public static string Filter_crossfeed {
+            get {
+                return ResourceManager.GetString("Filter_crossfeed", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Deband.
+        /// </summary>
+        public static string Filter_deband {
+            get {
+                return ResourceManager.GetString("Filter_deband", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Deblock.
+        /// </summary>
+        public static string Filter_deblock {
+            get {
+                return ResourceManager.GetString("Filter_deblock", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Decomb.
+        /// </summary>
+        public static string Filter_decomb {
+            get {
+                return ResourceManager.GetString("Filter_decomb", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Detelecine.
+        /// </summary>
+        public static string Filter_detelecine {
+            get {
+                return ResourceManager.GetString("Filter_detelecine", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Dialogue Enhance.
+        /// </summary>
+        public static string Filter_dialoguenhance {
+            get {
+                return ResourceManager.GetString("Filter_dialoguenhance", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Grayscale.
+        /// </summary>
+        public static string Filter_grayscale {
+            get {
+                return ResourceManager.GetString("Filter_grayscale", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to HQDN3D.
+        /// </summary>
+        public static string Filter_hqdn3d {
+            get {
+                return ResourceManager.GetString("Filter_hqdn3d", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Lapsharp.
+        /// </summary>
+        public static string Filter_lapsharp {
+            get {
+                return ResourceManager.GetString("Filter_lapsharp", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Loudness Normalization.
+        /// </summary>
+        public static string Filter_loudnorm {
+            get {
+                return ResourceManager.GetString("Filter_loudnorm", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to NLMeans.
+        /// </summary>
+        public static string Filter_nlmeans {
+            get {
+                return ResourceManager.GetString("Filter_nlmeans", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Stereo Widen.
+        /// </summary>
+        public static string Filter_stereowiden {
+            get {
+                return ResourceManager.GetString("Filter_stereowiden", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Unsharp.
+        /// </summary>
+        public static string Filter_unsharp {
+            get {
+                return ResourceManager.GetString("Filter_unsharp", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Yadif.
+        /// </summary>
+        public static string Filter_yadif {
+            get {
+                return ResourceManager.GetString("Filter_yadif", resourceCulture);
+            }
+        }
+        
+        /// <summary>
         ///   Looks up a localized string similar to Chroma Smooth:.
         /// </summary>
         public static string FiltersView_ChromaSmooth {
@@ -1538,7 +1844,7 @@ namespace HandBrakeWPF.Properties {
         }
         
         /// <summary>
-        ///   Looks up a localized string similar to Tune:.
+        ///   Looks up a localized string similar to Tune.
         /// </summary>
         public static string FiltersView_Tune {
             get {
@@ -1561,6 +1867,51 @@ namespace HandBrakeWPF.Properties {
         public static string FiltersViewAuto_DeblockTune {
             get {
                 return ResourceManager.GetString("FiltersViewAuto_DeblockTune", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Add Filter.
+        /// </summary>
+        public static string FilterView_AddFilter {
+            get {
+                return ResourceManager.GetString("FilterView_AddFilter", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Custom.
+        /// </summary>
+        public static string FilterView_Custom {
+            get {
+                return ResourceManager.GetString("FilterView_Custom", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Filter.
+        /// </summary>
+        public static string FilterView_Filter {
+            get {
+                return ResourceManager.GetString("FilterView_Filter", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Preset.
+        /// </summary>
+        public static string FilterView_Preset {
+            get {
+                return ResourceManager.GetString("FilterView_Preset", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Tune.
+        /// </summary>
+        public static string FilterView_Tune {
+            get {
+                return ResourceManager.GetString("FilterView_Tune", resourceCulture);
             }
         }
         
@@ -4339,6 +4690,15 @@ namespace HandBrakeWPF.Properties {
         public static string OptionsView_Downloading {
             get {
                 return ResourceManager.GetString("OptionsView_Downloading", resourceCulture);
+            }
+        }
+        
+        /// <summary>
+        ///   Looks up a localized string similar to Prefer use of AMF AMFDec for decoding video when using the AMFEnc encoder and the hardware is available for use..
+        /// </summary>
+        public static string OptionsView_EnableAmfDecSupport {
+            get {
+                return ResourceManager.GetString("OptionsView_EnableAmfDecSupport", resourceCulture);
             }
         }
         

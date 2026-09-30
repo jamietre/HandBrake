@@ -23,6 +23,7 @@ namespace HandBrakeWPF.Services.Encode.Factories
     using HandBrake.Interop.Interop.Json.Shared;
 
     using HandBrakeWPF.Model.Filters;
+    using HandBrakeWPF.Services.Encode.Model.Models.Filters;
     using HandBrakeWPF.Services.Interfaces;
 
     using AudioEncoderRateType = Model.Models.AudioEncoderRateType;
@@ -117,6 +118,7 @@ namespace HandBrakeWPF.Services.Encode.Factories
             }
 
             bool nvdec = this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableNvDecSupport);
+            bool amfdec = this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableAmfDecSupport);
             bool directx = this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableDirectXDecoding);
 
             int hwDecode = 0;
@@ -124,8 +126,11 @@ namespace HandBrakeWPF.Services.Encode.Factories
             {
                 hwDecode = (int)NativeConstants.HB_DECODE_NVDEC;
             }
-
-            if (directx && HandBrakeHardwareEncoderHelper.IsDirectXAvailable)
+            if (amfdec && HandBrakeHardwareEncoderHelper.IsAMFDecAvailable)
+            {
+                hwDecode = (int)NativeConstants.HB_DECODE_AMFDEC;
+            }
+            else if (directx && HandBrakeHardwareEncoderHelper.IsDirectXAvailable)
             {
                 hwDecode = (int)NativeConstants.HB_DECODE_MF;
             }
@@ -320,7 +325,12 @@ namespace HandBrakeWPF.Services.Encode.Factories
                 video.HardwareDecode = NativeConstants.HB_DECODE_NVDEC;
             }
 
-            if (HandBrakeHardwareEncoderHelper.IsDirectXAvailable && this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableDirectXDecoding))
+            //use AMFDec to scan and detect format
+            if (this.isEncodePath && HandBrakeHardwareEncoderHelper.IsAMFDecAvailable && this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableAmfDecSupport) && job.VideoEncoder.IsVCN)
+            {
+                video.HardwareDecode = NativeConstants.HB_DECODE_AMFDEC | NativeConstants.HB_DECODE_FORCE_HW;
+            }
+            else if (HandBrakeHardwareEncoderHelper.IsDirectXAvailable && this.userSettingService.GetUserSetting<bool>(UserSettingConstants.EnableDirectXDecoding))
             {
                 video.HardwareDecode = NativeConstants.HB_DECODE_MF | NativeConstants.HB_DECODE_FORCE_HW;
             }
@@ -366,8 +376,19 @@ namespace HandBrakeWPF.Services.Encode.Factories
                     NormalizeMixLevel = false,
                     Samplerate = sampleRate != null ? sampleRate.Rate : 0,
                     Name = !string.IsNullOrEmpty(item.TrackName) ? item.TrackName : null,
+                    FilterList = new List<Filter>()
                 };
 
+                foreach (var filter in item.AudioFilters)
+                {
+                    Filter hbFilter = CreateFilter(
+                        filter.FilterId,
+                        filter.Preset?.Key,
+                        filter.Tune?.Key,
+                        filter.CustomOptions);
+                    audioTrack.FilterList.Add(hbFilter);
+                }
+                
                 if (!item.IsPassthru)
                 {
                     if (item.EncoderRateType == AudioEncoderRateType.Quality)
@@ -380,13 +401,26 @@ namespace HandBrakeWPF.Services.Encode.Factories
                         audioTrack.Bitrate = item.Bitrate;
                     }
                 }
-
+                
                 audio.AudioList.Add(audioTrack);
             }
 
             return audio;
         }
 
+        private Filter CreateFilter(int filter, string preset, string tune, string custom)
+        {
+            string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson(filter, preset, tune, custom);
+            if (!string.IsNullOrEmpty(unparsedJson))
+            {
+                JsonDocument settings = JsonDocument.Parse(unparsedJson);
+
+                Filter filterItem = new Filter { ID = filter, Settings = settings };
+                return filterItem;
+            }
+            return null;
+        }
+        
         private Filters CreateFilters(EncodeTask job)
         {
             Filters filter = new Filters
@@ -395,125 +429,10 @@ namespace HandBrakeWPF.Services.Encode.Factories
             };
 
             // Note, order is important.
-
-            // Detelecine
-            if (job.Detelecine != Detelecine.Off)
+            foreach (AudioVideoFilter taskFilter in job.VideoFilters)
             {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_DETELECINE, null, null, job.CustomDetelecine);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_DETELECINE, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            // Deinterlace
-            if (job.DeinterlaceFilter == DeinterlaceFilter.Yadif)
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_YADIF, job.DeinterlacePreset?.ShortName, null, job.CustomDeinterlaceSettings);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument root = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_YADIF, Settings = root };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            // Decomb
-            if (job.DeinterlaceFilter == DeinterlaceFilter.Decomb)
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_DECOMB, job.DeinterlacePreset?.ShortName, null, job.CustomDeinterlaceSettings);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_DECOMB, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            // Bwdif
-            if (job.DeinterlaceFilter == DeinterlaceFilter.Bwdif)
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_BWDIF, job.DeinterlacePreset?.ShortName, null, job.CustomDeinterlaceSettings);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_BWDIF, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            if (job.DeinterlaceFilter == DeinterlaceFilter.Decomb || job.DeinterlaceFilter == DeinterlaceFilter.Yadif || job.DeinterlaceFilter == DeinterlaceFilter.Bwdif)
-            {
-                if (job.CombDetect != CombDetect.Off)
-                {
-                    string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_COMB_DETECT, EnumHelper<CombDetect>.GetShortName(job.CombDetect), null, job.CustomCombDetect);
-                    if (!string.IsNullOrEmpty(unparsedJson))
-                    {
-                        JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                        Filter filterItem = new Filter
-                                                {
-                                                    ID = (int)hb_filter_ids.HB_FILTER_COMB_DETECT,
-                                                    Settings = settings
-                                                };
-                        filter.FilterList.Add(filterItem);
-                    }
-                }    
-            }
-
-            // Denoise
-            if (job.Denoise != Denoise.Off)
-            {
-                hb_filter_ids id = job.Denoise == Denoise.hqdn3d
-                    ? hb_filter_ids.HB_FILTER_HQDN3D
-                    : hb_filter_ids.HB_FILTER_NLMEANS;
-
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)id, job.DenoisePreset?.ShortName, job.DenoiseTune?.ShortName, job.CustomDenoise);
-
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)id, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            // Sharpen
-            if (job.Sharpen != Sharpen.Off)
-            {
-                hb_filter_ids id = job.Sharpen == Sharpen.LapSharp
-                    ? hb_filter_ids.HB_FILTER_LAPSHARP
-                    : hb_filter_ids.HB_FILTER_UNSHARP;
-
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)id, job.SharpenPreset.Key, job.SharpenTune.Key, job.SharpenCustom);
-
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)id, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            // Deblock
-            if (job.DeblockPreset != null && job.DeblockPreset.Key != "off")
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_DEBLOCK, job.DeblockPreset.Key, job.DeblockTune.Key, job.CustomDeblock);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_DEBLOCK, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
+                Filter filterItem = CreateFilter(taskFilter.FilterId, taskFilter.Preset?.Key, taskFilter.Tune?.Key, taskFilter.CustomOptions);
+                filter.FilterList.Add(filterItem);
             }
 
             // CropScale Filter
@@ -555,39 +474,6 @@ namespace HandBrakeWPF.Services.Encode.Factories
                     };
                     filter.FilterList.Add(padding);
                 }
-            }
-
-            // Colourspace
-            if (job.Colourspace != null && job.Colourspace.Key != "off")
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_COLORSPACE, job.Colourspace.Key, null, job.CustomColourspace);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_COLORSPACE, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-            if (job.ChromaSmooth != null && job.ChromaSmooth.Key != "off")
-            {
-                string unparsedJson = HandBrakeFilterHelpers.GenerateFilterSettingJson((int)hb_filter_ids.HB_FILTER_CHROMA_SMOOTH, job.ChromaSmooth.Key, job.ChromaSmoothTune?.Key, job.CustomChromaSmooth);
-                if (!string.IsNullOrEmpty(unparsedJson))
-                {
-                    JsonDocument settings = JsonDocument.Parse(unparsedJson);
-
-                    Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_CHROMA_SMOOTH, Settings = settings };
-                    filter.FilterList.Add(filterItem);
-                }
-            }
-
-
-            // Grayscale
-            if (job.Grayscale)
-            {
-                Filter filterItem = new Filter { ID = (int)hb_filter_ids.HB_FILTER_GRAYSCALE, Settings = null };
-                filter.FilterList.Add(filterItem);
             }
 
             // Rotate

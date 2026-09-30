@@ -251,6 +251,12 @@ static int presets_do(preset_do_f do_func, hb_value_t *preset,
             return result;
 
         // Then perform preset action on the children of the folder
+        if (ctx->path.depth >= HB_MAX_PRESET_FOLDER_DEPTH)
+        {
+            hb_log("Discarding preset folder nested deeper than %d levels\n",
+                   HB_MAX_PRESET_FOLDER_DEPTH - 1);
+            return PRESET_DO_DELETE;
+        }
         ctx->path.depth++;
         next = hb_dict_get(preset, "ChildrenArray");
         result = presets_do(do_func, next, ctx);
@@ -926,10 +932,11 @@ static void add_audio_for_lang(hb_value_array_t *list, const hb_dict_t *preset,
                     {
                         hb_dict_t *filter_dict = hb_value_array_get(preset_filter_list, jj);
 
-                        const char *name = NULL, *preset = NULL, *custom = NULL;
+                        const char *name = NULL, *preset = NULL, *tune = NULL, *custom = NULL;
 
                         name = hb_dict_get_string(filter_dict, "AudioFilterName");
                         preset = hb_dict_get_string(filter_dict, "AudioFilterPreset");
+                        tune = hb_dict_get_string(filter_dict, "AudioFilterTune");
                         custom = hb_dict_get_string(filter_dict, "AudioFilterCustom");
 
                         if (name != NULL && preset != NULL)
@@ -940,7 +947,7 @@ static void add_audio_for_lang(hb_value_array_t *list, const hb_dict_t *preset,
                                 filter_id <= HB_AUDIO_FILTER_LAST)
                             {
                                 hb_dict_t *filter_settings = hb_generate_filter_settings(
-                                                           filter_id, preset, NULL, custom);
+                                                           filter_id, preset, tune, custom);
 
                                 if (filter_settings == NULL)
                                 {
@@ -951,6 +958,10 @@ static void add_audio_for_lang(hb_value_array_t *list, const hb_dict_t *preset,
 
                                 hb_dict_t *filter_dict = hb_dict_init();
                                 hb_dict_set(filter_dict, "ID", hb_value_int(filter_id));
+                                hb_dict_set_string(filter_dict, "Name", name);
+                                hb_dict_set_string(filter_dict, "Preset", preset);
+                                hb_dict_set_string(filter_dict, "Tune", tune ? tune : "none");
+                                hb_dict_set_string(filter_dict, "Custom", custom ? custom : "");
                                 hb_dict_set(filter_dict, "Settings", filter_settings);
                                 hb_add_filter2(filter_list, filter_dict);
                             }
@@ -3025,7 +3036,7 @@ static hb_value_t * import_hierarchy_29_0_0(hb_value_t *presets)
         {
             int          pos = hb_value_array_len(new_list);
             const char * name = hb_dict_get_string(item, "PresetName");
-            if (strcmp(name, "My Presets"))
+            if (name == NULL || strcmp(name, "My Presets"))
             {
                 continue;
             }
@@ -3108,7 +3119,7 @@ static void und_to_any(hb_value_array_t * list)
     {
         const char *lang;
         lang = hb_value_get_string(hb_value_array_get(list, ii));
-        if (!strcasecmp(lang, "und"))
+        if (lang != NULL && !strcasecmp(lang, "und"))
         {
             hb_value_array_set(list, ii, hb_value_string("any"));
         }

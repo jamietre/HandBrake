@@ -862,6 +862,10 @@ void hb_display_job_info(hb_job_t *job)
 
                 hb_display_filters_info(audio->config.out.list_filter, "     ");
             }
+            char channel_layout_name[256];
+            hb_layout_get_name(audio->config.out.ch_layout,
+                               channel_layout_name, sizeof(channel_layout_name));
+            hb_log("     + ch layout: %s", channel_layout_name);
         }
     }
 }
@@ -1233,6 +1237,15 @@ static int sanitize_audio(hb_job_t *job)
             audio->config.out.samplerate = audio->config.in.samplerate;
 
             av_channel_layout_copy(audio->config.out.ch_layout, audio->config.in.ch_layout);
+
+            // Remove unneeded filters.
+            hb_filter_object_t *filter = NULL;
+            while ((filter = hb_list_item(audio->config.out.list_filter, 0)))
+            {
+                hb_list_rem(audio->config.out.list_filter, filter);
+                hb_filter_close(&filter);
+            }
+
             continue;
         }
 
